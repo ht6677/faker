@@ -1,0 +1,31 @@
+name: Auto Deploy
+on:
+  push:
+    branches:
+      - master
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: skip or not
+        id: skipornot
+        uses: "fcurella/gh-action-commit-msg-match@main"
+        with:
+          matchWords: skip ci,release
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: 'Wait for status checks'
+        id: waitforstatuschecks
+        if: steps.skipornot.outputs.match == 'false'
+        uses: "fcurella/gh-status-check@main"
+        with:
+          ignoreContexts: coverage/coveralls
+          checkInterval: 12
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+      - name: 'placeholder'
+        run: "echo hurray"
+        if: steps.waitforstatuschecks.outputs.status == 'success'
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          LABELS: release

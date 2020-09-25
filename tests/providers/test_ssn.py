@@ -3,6 +3,7 @@ import unittest
 
 from datetime import datetime
 from itertools import cycle
+from unittest import mock
 
 import freezegun
 import pytest
@@ -613,6 +614,24 @@ class TestEtEE(unittest.TestCase):
         assert re.search(r'^\d{11}$', value)
         assert value.endswith('0')
 
+    @freezegun.freeze_time('2002-01-01')
+    def test_ssn_2000(self):
+        self.fake.random = random2.Random()
+
+        self.fake.seed_instance(0)
+        value = self.fake.ssn(min_age=0, max_age=1)
+        assert re.search(r'^\d{11}$', value)
+        assert value[0] in ('5', '6')
+
+    @freezegun.freeze_time('2101-01-01')
+    def test_ssn_2100(self):
+        self.fake.random = random2.Random()
+
+        self.fake.seed_instance(0)
+        value = self.fake.ssn(min_age=0, max_age=1)
+        assert re.search(r'^\d{11}$', value)
+        assert value[0] in ('7', '8')
+
     def test_vat_id(self):
         for _ in range(100):
             assert re.search(r'^EE\d{9}$', self.fake.vat_id())
@@ -665,6 +684,31 @@ class TestFrFR(unittest.TestCase):
     def test_vat_id(self):
         for _ in range(100):
             assert re.search(r'^FR[\w\d]{2} \d{9}$', self.fake.vat_id())
+
+
+class TestFrCH:
+    @pytest.mark.parametrize("digits,expected", [
+        ("22500105", "CHE225001055"),
+        ("60362354", "CHE603623540"),
+        ("36806684", "CHE368066842"),
+    ], ids=[
+        "checksum_remainder_11",
+        "checksum_remainder_10",
+        "checksum_remainder_other",
+    ])
+    def test_checksum(self, digits, expected):
+        """The checksum of the Swiss UID number is calculated correctly
+        given a certain input of 8 digits."""
+        fake = Faker("fr_CH")
+        Faker.seed(0)
+
+        with mock.patch(
+            "faker.providers.ssn.fr_CH.Provider.numerify",
+            return_value=digits,
+            autospec=True,
+        ):
+            result = fake.vat_id()
+            assert result == expected
 
 
 class TestEnGB(unittest.TestCase):
@@ -939,3 +983,30 @@ class TestEnIn(unittest.TestCase):
     def test_valid_luhn(self):
         for aadhaar_id in self.aadhaar_ids:
             assert luhn_checksum(aadhaar_id) == 0
+
+
+class TestZhCN(unittest.TestCase):
+    def setUp(self):
+        self.fake = Faker('zh_CN')
+        Faker.seed(0)
+
+    def test_zh_CN_ssn(self):
+        for _ in range(100):
+            ssn = self.fake.ssn()
+            assert len(ssn) == 18
+
+    def test_zh_CN_ssn_invalid_gender_passed(self):
+        with pytest.raises(ValueError):
+            self.fake.ssn(gender='X')
+        with pytest.raises(ValueError):
+            self.fake.ssn(gender='*')
+        with pytest.raises(ValueError):
+            self.fake.ssn(gender='22')
+
+    def test_zh_CN_ssn_gender_passed(self):
+        # Females have even number at index 17
+        ssn = self.fake.ssn(gender='F')
+        assert int(ssn[16]) % 2 == 0
+        # Males have odd number at index 17
+        ssn = self.fake.ssn(gender='M')
+        assert int(ssn[16]) % 2 == 1
